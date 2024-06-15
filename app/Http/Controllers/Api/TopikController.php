@@ -99,13 +99,15 @@ class TopikController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        //upload image
-        $image = $request->file('image');
-        $image->storeAs('public/topiks', $image->hashName());
+        if($request->file('image')){
+            $path = $request->file('image')->store('topik', 's3');
+        }
+
+        $path = Storage::disk('s3')->url($path);
 
         //create topik
         $topik = Topik::create([
-            'image'     => $image->hashName(),
+            'image'     => $path,
             'name'     => $request->name,
         ]);
 
@@ -113,57 +115,60 @@ class TopikController extends Controller
         return new TopikResource(true, 'Data Topik Berhasil Ditambahkan!', $topik);
     }
 
-    public function update(Request $request, Topik $topik)
+    public function update(Request $request, $id)
     {
-        //define validation rules
         $validator = Validator::make($request->all(), [
-            'name'     => 'required',
+            'image'     => 'sometimes|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
+            'name'      => 'required',
         ]);
 
-        //check if validation fails
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
 
-        //check if image is not empty
-        if ($request->hasFile('image')) {
+        $topik = Topik::find($id);
 
-            //upload image
-            $image = $request->file('image');
-            $image->storeAs('public/topiks', $image->hashName());
-
-            //delete old image
-            Storage::delete('public/topiks/'.$topik->image);
-
-            //update topik with new image
-            $topik->update([
-                'image'     => $image->hashName(),
-                'name'     => $request->name,
-            ]);
-
-        } else {
-
-            //update topik without image
-            $topik->update([
-                'name'     => $request->name,
-            ]);
+        if (!$topik) {
+            return response()->json(['error' => 'Topic not found'], 404);
         }
 
-        //return response
-        return new TopikResource(true, 'Data topik Berhasil Diubah!', $topik);
+        if ($request->file('image')) {
+            if ($topik->image) {
+                $oldImageId = pathinfo(basename(parse_url($topik->image, PHP_URL_PATH)), PATHINFO_FILENAME);
+                $oldExtension = pathinfo($topik->image, PATHINFO_EXTENSION);
+                $oldS3ImagePath = 'topik/' . $oldImageId . '.' . $oldExtension;
+                Storage::disk('s3')->delete($oldS3ImagePath);
+            }
+
+            $path = $request->file('image')->store('topik', 's3');
+            $path = Storage::disk('s3')->url($path);
+            $topik->image = $path;
+        }
+
+        $topik->name = $request->name;
+        $topik->save();
+
+        return new TopikResource(true, 'Data Topik Berhasil Diubah!', $topik);
     }
 
-    public function destroy(Topik $topik)
+    public function destroy($id)
     {
-        //delete image
-        Storage::delete('public/topiks/'.$topik->image);
+        $topik = Topik::find($id);
+        if (!$topik) {
+            return response()->json(['error' => 'Topic not found'], 404);
+        }
 
-        //delete topik
+        if ($topik->image) {
+            $imageId = pathinfo(basename(parse_url($topik->image, PHP_URL_PATH)), PATHINFO_FILENAME);
+            $extension = pathinfo($topik->image, PATHINFO_EXTENSION);
+            $s3ImagePath = 'topik/' . $imageId . '.' . $extension;
+            Storage::disk('s3')->delete($s3ImagePath);
+        }
+
         $topik->delete();
-
-        //return response
-        return new TopikResource(true, 'Data Topik Berhasil Dihapus!', null);
+        return response()->json(['success' => 'Topic deleted successfully'], 200);
     }
+
 
     public function show(Topik $topik)
     {

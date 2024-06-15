@@ -55,13 +55,15 @@ class PostController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        //upload image
-        $image = $request->file('image');
-        $image->storeAs('public/posts', $image->hashName());
+        if($request->file('image')){
+            $path = $request->file('image')->store('topik', 's3');
+        }
+
+        $path = Storage::disk('s3')->url($path);
 
         //create post
         $post = Post::create([
-            'image'     => $image->hashName(),
+            'image'     => $path,
             'title'     => $request->title,
             'topik_id' => $request->topik_id,
             'content'   => $request->content,
@@ -85,54 +87,83 @@ class PostController extends Controller
         return new QuizResource(true, 'Data Quiz by post ditemukan!', $quizzes); // Mengembalikan data dengan QuizResource
     }
 
-    public function update(Request $request, Post $post)
+    public function update(Request $request, $id)
     {
-        //define validation rules
+        // Define validation rules
         $validator = Validator::make($request->all(), [
             'title'     => 'required',
+            'topik_id'  => 'required',
             'content'   => 'required',
-            'topik_id' => 'required',
+            'video'     => 'required',
         ]);
 
-        //check if validation fails
+        // Check if validation fails
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
 
-        //check if image is not empty
-        if ($request->hasFile('image')) {
+        // Find the Post by ID
+        $post = Post::find($id);
 
-            //upload image
-            $image = $request->file('image');
-            $image->storeAs('public/posts', $image->hashName());
-
-            //delete old image
-            Storage::delete('public/posts/'.$post->image);
-
-            //update post with new image
-            $post->update([
-                'image'     => $image->hashName(),
-                'title'     => $request->title,
-                'topik_id' => $request->topik_id,
-                'content'   => $request->content,
-                'video'     => $request->video,
-            ]);
-
-        } else {
-            $post->update([
-                'title'     => $request->title,
-                'topik_id' => $request->topik_id,
-                'content'   => $request->content,
-                'video'   => $request->video,
-            ]);
+        // Check if Post exists
+        if (!$post) {
+            return response()->json(['error' => 'Post not found'], 404);
         }
+
+        // Handle image update
+        if ($request->file('image')) {
+            // Extract the old image ID from the stored image path and delete it from S3
+            if ($post->image) {
+                $oldImageId = pathinfo(basename(parse_url($post->image, PHP_URL_PATH)), PATHINFO_FILENAME);
+                $oldExtension = pathinfo($post->image, PATHINFO_EXTENSION);
+                $oldS3ImagePath = 'topik/' . $oldImageId . '.' . $oldExtension;
+                Storage::disk('s3')->delete($oldS3ImagePath);
+            }
+
+            // Store the new image
+            $path = $request->file('image')->store('topik', 's3');
+            $path = Storage::disk('s3')->url($path);
+            $post->image = $path;
+        }
+
+        // Update Post details
+        $post->title = $request->title;
+        $post->topik_id = $request->topik_id;
+        $post->content = $request->content;
+        $post->video = $request->video;
+        $post->save();
+
+        // Return response
         return new PostResource(true, 'Data Post Berhasil Diubah!', $post);
     }
 
-    public function destroy(Post $post)
+
+    public function destroy($id)
     {
-        Storage::delete('public/posts/'.$post->image);
+        // Find the Post by ID
+        $post = Post::find($id);
+
+        // Check if Post exists
+        if (!$post) {
+            return response()->json(['error' => 'Post not found'], 404);
+        }
+
+        // Check if Post has an associated image
+        if ($post->image) {
+            // Extract the image ID from the stored image path
+            $imageId = pathinfo(basename(parse_url($post->image, PHP_URL_PATH)), PATHINFO_FILENAME);
+            $extension = pathinfo($post->image, PATHINFO_EXTENSION);
+            $s3ImagePath = 'topik/' . $imageId . '.' . $extension;
+
+            // Delete the image from S3
+            Storage::disk('s3')->delete($s3ImagePath);
+        }
+
+        // Delete the Post record from the database
         $post->delete();
-        return new PostResource(true, 'Data Post Berhasil Dihapus!', null);
+
+        // Return response
+        return response()->json(['success' => 'Post deleted successfully'], 200);
     }
+
 }

@@ -35,13 +35,15 @@ class BantuanController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        //upload image
-        $image = $request->file('image');
-        $image->storeAs('public/bantuans', $image->hashName());
+        if($request->file('image')){
+            $path = $request->file('image')->store('bantuan', 's3');
+        }
+
+        $path = Storage::disk('s3')->url($path);
 
         //create bantuan
         $bantuan = Bantuan::create([
-            'image'     => $image->hashName(),
+            'image'     => $path,
             'title'     => $request->title,
             'tipe' => $request->tipe,
             'link_url'   => $request->link_url,
@@ -57,53 +59,65 @@ class BantuanController extends Controller
         return new BantuanResource(true, 'Data Bantuan Ditemukan!', $bantuan);
     }
 
-    public function update(Request $request, Bantuan $bantuan)
+    public function update(Request $request, $id)
     {
+        // Define validation rules
         $validator = Validator::make($request->all(), [
             'title'     => 'required',
-            'tipe'   => 'required',
-            'link_url' => 'required',
+            'tipe'      => 'required',
+            'link_url'  => 'required',
         ]);
 
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
 
-        if ($request->hasFile('image')) {
-            $image = $request->file('image');
-            $image->storeAs('public/bantuans', $image->hashName());
+        $bantuan = Bantuan::find($id);
 
-
-            Storage::delete('public/bantuans/'.$bantuan->image);
-
-            $bantuan->update([
-                'image'     => $image->hashName(),
-                'title'     => $request->title,
-                'tipe'      => $request->tipe,
-                'link_url'  => $request->link_url,
-            ]);
-
-        } else {
-            $bantuan->update([
-                'title'     => $request->title,
-                'tipe'      => $request->tipe,
-                'link_url'  => $request->link_url,
-            ]);
+        if (!$bantuan) {
+            return response()->json(['error' => 'Bantuan not found'], 404);
         }
 
-        //return response
+        if ($request->file('image')) {
+            if ($bantuan->image) {
+                $oldImageId = pathinfo(basename(parse_url($bantuan->image, PHP_URL_PATH)), PATHINFO_FILENAME);
+                $oldExtension = pathinfo($bantuan->image, PATHINFO_EXTENSION);
+                $oldS3ImagePath = 'bantuan/' . $oldImageId . '.' . $oldExtension;
+                Storage::disk('s3')->delete($oldS3ImagePath);
+            }
+            $path = $request->file('image')->store('bantuan', 's3');
+            $path = Storage::disk('s3')->url($path);
+            $bantuan->image = $path;
+        }
+
+        $bantuan->title = $request->title;
+        $bantuan->tipe = $request->tipe;
+        $bantuan->link_url = $request->link_url;
+        $bantuan->save();
+
         return new BantuanResource(true, 'Data Bantuan Berhasil Diubah!', $bantuan);
     }
 
-    public function destroy(Bantuan $bantuan)
+    public function destroy($id)
     {
-        //delete image
-        Storage::delete('public/bantuans/'.$bantuan->image);
+        $bantuan = Bantuan::find($id);
 
-        //delete bantuan
+        if (!$bantuan) {
+            return response()->json(['error' => 'Bantuan not found'], 404);
+        }
+
+        if ($bantuan->image) {
+
+            $imageId = pathinfo(basename(parse_url($bantuan->image, PHP_URL_PATH)), PATHINFO_FILENAME);
+            $extension = pathinfo($bantuan->image, PATHINFO_EXTENSION);
+            $s3ImagePath = 'bantuan/' . $imageId . '.' . $extension;
+
+            Storage::disk('s3')->delete($s3ImagePath);
+        }
+
         $bantuan->delete();
 
-        //return response
-        return new BantuanResource(true, 'Data bantuan Berhasil Dihapus!', null);
+        return response()->json(['success' => 'Bantuan deleted successfully'], 200);
     }
+
 }
