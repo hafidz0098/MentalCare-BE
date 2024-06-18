@@ -89,6 +89,7 @@ class QuizAttemptController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
+            'user_id'   => 'required',
             'quiz_id' => 'required',
             'user_answer' => 'required',
         ]);
@@ -97,11 +98,11 @@ class QuizAttemptController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        $user = auth()->guard('api')->user();
+        // $user = auth()->guard('api')->user();
 
         $quizAttempt = new QuizAttempt();
         $quizAttempt->quiz_id = $request->quiz_id;
-        $quizAttempt->user_id = $user->id;
+        $quizAttempt->user_id = $request->user_id;
         $quizAttempt->user_answer = $request->user_answer;
 
         $quiz = Quiz::findOrFail($request->quiz_id);
@@ -110,7 +111,7 @@ class QuizAttemptController extends Controller
         $correctAnswer = strtolower($quiz->correct_answer);
 
         $progress = new UserProgress();
-        $progress->user_id = $user->id;
+        $progress->user_id = $request->user_id;
         $progress->post_id = $request->post_id;
 
         if ($userAnswer === $correctAnswer) {
