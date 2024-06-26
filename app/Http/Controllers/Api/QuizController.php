@@ -40,28 +40,36 @@ class QuizController extends Controller
      * @return \Illuminate\Http\Response
      */
 
-    public function store(Request $request, Post $post)
-    {
-        $validator = Validator::make($request->all(), [
-            'post_id' => 'required',
-            'materi' => 'required',
-            'question'     => 'required',
-            'correct_answer' => 'required',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json($validator->errors(), 422);
-        }
-
-        $quiz = Quiz::create([
-            'post_id' => $request->post_id,
-            'materi' => $request->materi,
-            'question' => $request->question,
-            'correct_answer' => $request->correct_answer,
-        ]);
-
-        return new QuizResource(true, 'Berhasil menambahkan quiz baru!', $quiz);
-    }
+     public function store(Request $request)
+     {
+         $validator = Validator::make($request->all(), [
+             'post_id' => 'required|exists:posts,id',
+             'materi' => 'required|string',
+             'question' => 'required|string',
+             'option_a' => 'required|string',
+             'option_b' => 'required|string',
+             'option_c' => 'required|string',
+             'option_d' => 'required|string',
+             'correct_answer' => 'required|string',
+         ]);
+ 
+         if ($validator->fails()) {
+             return response()->json($validator->errors(), 422);
+         }
+ 
+         $quiz = Quiz::create([
+             'post_id' => $request->post_id,
+             'materi' => $request->materi,
+             'question' => $request->question,
+             'option_a' => $request->option_a,
+             'option_b' => $request->option_b,
+             'option_c' => $request->option_c,
+             'option_d' => $request->option_d,
+             'correct_answer' => $request->correct_answer,
+         ]);
+ 
+         return new QuizResource(true, 'Berhasil menambahkan quiz baru!', $quiz);
+     }
 
     /**
      * Display the specified resource.

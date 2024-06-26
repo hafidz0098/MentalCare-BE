@@ -92,23 +92,23 @@ class QuizAttemptController extends Controller
             'user_id'   => 'required',
             'quiz_id' => 'required',
             'user_answer' => 'required',
+            'post_id' => 'required',
         ]);
 
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
 
-        // $user = auth()->guard('api')->user();
-
         $quizAttempt = new QuizAttempt();
         $quizAttempt->quiz_id = $request->quiz_id;
         $quizAttempt->user_id = $request->user_id;
         $quizAttempt->user_answer = $request->user_answer;
 
+        // Retrieve the quiz details to get the correct answer
         $quiz = Quiz::findOrFail($request->quiz_id);
         
-        $userAnswer = strtolower($quizAttempt->user_answer);
-        $correctAnswer = strtolower($quiz->correct_answer);
+        $userAnswer = $quizAttempt->user_answer;
+        $correctAnswer = $quiz->correct_answer;
 
         $progress = new UserProgress();
         $progress->user_id = $request->user_id;
@@ -124,12 +124,17 @@ class QuizAttemptController extends Controller
             $progress->status = "Not Finished";
         }
 
-        // Simpan quiz attempt
+        // Save quiz attempt and progress
         $quizAttempt->save();
         $progress->save();
 
-        return new QuizAttemptResource(true, 'Quiz berhasil dikerjakan!', $quizAttempt);
+        return response()->json([
+            'success' => true,
+            'message' => 'Quiz berhasil dikerjakan!',
+            'data' => $quizAttempt
+        ], 200);
     }
+
 
     /**
      * Display the specified resource.
